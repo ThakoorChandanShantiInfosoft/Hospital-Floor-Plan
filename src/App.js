@@ -18,10 +18,10 @@ function App() {
   const [startDragPosition, setStartDragPosition] = useState({ x: 0, y: 0 });
   const imageContainerRef = useRef(null);
   const [showUploadPrompt, setShowUploadPrompt] = useState(true); 
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   const initialLoad = useRef(true);
 
-  
   useEffect(() => {
     const savedData = localStorage.getItem('hospitalLayoutData');
     if (savedData) {
@@ -33,11 +33,12 @@ function App() {
         setFloor(data.floor);
         setPatientInfo(data.patientInfo);
         setShowUploadPrompt(!data.uploadedImage);
+        setZoomLevel(data.zoomLevel);
       }
     }
     initialLoad.current = false;
   }, []);
-
+  
   useEffect(() => {
     if (!initialLoad.current) {
       const data = {
@@ -46,12 +47,14 @@ function App() {
         imagePosition,
         floor,
         patientInfo,
+        zoomLevel,
       };
       if (uploadedImage !== null) {
         localStorage.setItem('hospitalLayoutData', JSON.stringify(data));
       }
     }
-  }, [uploadedImage, rectangles, imagePosition, floor, patientInfo]);
+  }, [uploadedImage, rectangles, imagePosition, floor, patientInfo, zoomLevel]);
+  
 
   const handleImageUpload = (event) => {
     const files = event.target.files || event.dataTransfer.files;
@@ -160,6 +163,43 @@ function App() {
     closeModal();
   };
 
+  const adjustRectanglesForZoom = (newZoomLevel) => {
+    const imageCenterX = imageContainerRef.current.offsetWidth / 2;
+    const imageCenterY = imageContainerRef.current.offsetHeight / 2;
+  
+    setRectangles(prevRectangles =>
+      prevRectangles.map(rect => {
+        const rectCenterX = rect.x + rect.width / 2;
+        const rectCenterY = rect.y + rect.height / 2;
+        const deltaX = rectCenterX - imageCenterX;
+        const deltaY = rectCenterY - imageCenterY;
+        const newX = (deltaX * newZoomLevel / zoomLevel) + imageCenterX - (rect.width * newZoomLevel / zoomLevel) / 2;
+        const newY = (deltaY * newZoomLevel / zoomLevel) + imageCenterY - (rect.height * newZoomLevel / zoomLevel) / 2;
+  
+        return {
+          ...rect,
+          x: newX,
+          y: newY,
+          width: rect.width * newZoomLevel / zoomLevel,
+          height: rect.height * newZoomLevel / zoomLevel,
+        };
+      })
+    );
+  };
+  
+  
+  const zoomIn = () => {
+    const newZoomLevel = Math.min(zoomLevel + 0.1, 3);
+    adjustRectanglesForZoom(newZoomLevel);
+    setZoomLevel(newZoomLevel);
+  };
+  
+  const zoomOut = () => {
+    const newZoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+    adjustRectanglesForZoom(newZoomLevel);
+    setZoomLevel(newZoomLevel);
+  };
+
   return (
     <div className="App">
       <div className='button-container'>
@@ -218,6 +258,8 @@ function App() {
         <Button variant="contained" color="primary" onClick={removeImage} style={{ marginLeft: 10 }}>
           Remove Image
         </Button>
+        <Button variant="contained" color="primary" onClick={zoomIn}>Zoom In</Button>
+<Button variant="contained" color="primary" onClick={zoomOut}>Zoom Out</Button>
       </div>
       <div
         className="image-container"
@@ -225,7 +267,7 @@ function App() {
         onClick={triggerFileInput} 
         style={{
           width: '1020px',
-          height: '600px',
+          height: '575px',
           overflow: 'hidden',
           position: 'relative',
           border: '0.5px solid grey',
@@ -257,13 +299,13 @@ function App() {
           }}
         >
           {uploadedImage && (
-            <img src={uploadedImage} alt="Uploaded" style={{ width: '100%', height: '100%', objectFit: 'contain' }} draggable="false" />
+            <img src={uploadedImage} alt="Uploaded" style={{ width: '100%', height: '100%', objectFit: 'contain', transform: `scale(${zoomLevel})` }} draggable="false" />
           )}
           {rectangles.map((rect) => (
             <Rnd
-              key={rect.id}
-              size={{ width: rect.width, height: rect.height }}
-              position={{ x: rect.x, y: rect.y }}
+            key={rect.id}
+            size={{ width: rect.width, height: rect.height }}
+            position={{ x: rect.x, y: rect.y }}
               onDragStart={(e) => e.stopPropagation()}
               onDragStop={(e, d) => {
                 const updatedRects = rectangles.map(r =>
